@@ -1,6 +1,7 @@
 package main
 
 import (
+	"goproject/actions"
 	"goproject/routes"
 	"goproject/storage"
 	"net/http"
@@ -8,9 +9,11 @@ import (
 
 func main() {
 
-	var db storage.StorageInterface = &storage.SqlLiteDb{}
+	var db storage.IStorage = &storage.SqlLiteDb{}
 	db.InitializeDatabase()
 
-	server := routes.SetupRoutes(db)
+	var actions actions.IActions = &actions.Actions{Db: db}
+
+	server := routes.SetupRoutes(actions)
 	http.ListenAndServe(":8888", server)
 }

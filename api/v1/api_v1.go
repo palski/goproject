@@ -2,15 +2,15 @@ package api_v1
 
 import (
 	"encoding/json"
+	"goproject/actions"
 	"goproject/storage"
 	"net/http"
-	"slices"
 
 	"github.com/gorilla/mux"
 )
 
 type EventHandler struct {
-	Db storage.StorageInterface
+	Actions actions.IActions
 }
 
 func (e *EventHandler) HandleGetEventResultsRequest(response http.ResponseWriter, request *http.Request) {
@@ -25,17 +25,11 @@ func (e *EventHandler) HandleGetEventResultsRequest(response http.ResponseWriter
 		return
 	}
 
-	ch := make(chan storage.Event)
-	go e.Db.GetEvent(ch, eventId)
-	event := <-ch
-
+	event, suitableDates := e.Actions.GetEventWithSuitableVotes(eventId)
 	if event.UUID == "" {
 		response.WriteHeader(http.StatusNotFound)
 		return
 	}
-
-	allVoters := getAllVoterNames(event)
-	suitableDates := getDatesWithAllVoters(allVoters, event)
 
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(http.StatusOK)
@@ -43,7 +37,7 @@ func (e *EventHandler) HandleGetEventResultsRequest(response http.ResponseWriter
 		EventResultDTO{
 			Id:            event.UUID,
 			Name:          event.Name,
-			SuitableDates: suitableDates,
+			SuitableDates: mapToDto(suitableDates),
 		},
 	)
 }
@@ -67,24 +61,23 @@ func (e *EventHandler) HandleVoteEventRequest(response http.ResponseWriter, requ
 		return
 	}
 
-	ch := make(chan bool)
-	go e.Db.AddVote(ch, eventId, voteDto.Name, voteDto.Votes)
-	if !<-ch {
+	success := e.Actions.CreateNewVote(eventId, voteDto.Name, voteDto.Votes)
+	if !success {
 		response.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	eventChannel := make(chan storage.Event)
-	go e.Db.GetEvent(eventChannel, eventId)
-	writeEventToResponse(response, <-eventChannel)
+	event := e.Actions.GetEvent(eventId)
+
+	writeEventToResponse(response, event)
 }
 
 func (e *EventHandler) HandleEventsRequest(response http.ResponseWriter, request *http.Request) {
 
 	if request.Method == "POST" {
-		createNewEvent(response, request, e.Db)
+		createNewEvent(response, request, e.Actions)
 	} else if request.Method == "GET" {
-		getAllvents(response, request, e.Db)
+		getAllvents(response, request, e.Actions)
 	} else {
 		response.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -102,9 +95,9 @@ func (e *EventHandler) HandleGetEventDetailsRequest(response http.ResponseWriter
 		return
 	}
 
-	ch := make(chan storage.Event)
-	go e.Db.GetEvent(ch, eventId)
-	writeEventToResponse(response, <-ch)
+	event := e.Actions.GetEvent(eventId)
+
+	writeEventToResponse(response, event)
 }
 
 func writeEventToResponse(response http.ResponseWriter, event storage.Event) {
@@ -124,18 +117,16 @@ func writeEventToResponse(response http.ResponseWriter, event storage.Event) {
 	}
 }
 
-func getAllvents(response http.ResponseWriter, request *http.Request, db storage.StorageInterface) {
+func getAllvents(response http.ResponseWriter, request *http.Request, actions actions.IActions) {
 
-	ch := make(chan []storage.Event)
-	go db.GetAllEvents(ch)
-	events := mapToSimpleEventDTO(<-ch)
+	events := mapToSimpleEventDTO(actions.GetAllEvents())
 
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(http.StatusOK)
 	json.NewEncoder(response).Encode(events)
 }
 
-func createNewEvent(response http.ResponseWriter, request *http.Request, db storage.StorageInterface) {
+func createNewEvent(response http.ResponseWriter, request *http.Request, action actions.IActions) {
 	var eventDto NewEventDTO
 	var error = json.NewDecoder(request.Body).Decode(&eventDto)
 	if error != nil {
@@ -143,9 +134,7 @@ func createNewEvent(response http.ResponseWriter, request *http.Request, db stor
 		return
 	}
 
-	ch := make(chan string)
-	go db.AddEvent(ch, eventDto.Name, eventDto.Dates)
-	newUuid := <-ch
+	newUuid := action.CreateNewEvent(eventDto.Name, eventDto.Dates)
 
 	if newUuid != "" {
 		response.Header().Set("Content-Type", "application/json")
@@ -156,34 +145,13 @@ func createNewEvent(response http.ResponseWriter, request *http.Request, db stor
 	}
 }
 
-func getDatesWithAllVoters(voters []string, event storage.Event) []ProposedDateVotesDTO {
+func mapToDto(suitableDates []actions.SuitableDates) []ProposedDateVotesDTO {
 	var datesWithMostVotes []ProposedDateVotesDTO
-	for _, date := range event.ProposedDates {
-		if len(date.Votes) == len(voters) {
-			datesWithMostVotes = append(datesWithMostVotes,
-				ProposedDateVotesDTO{Date: date.Date, People: voters})
-		}
+	for _, suitableDate := range suitableDates {
+		datesWithMostVotes = append(datesWithMostVotes,
+			ProposedDateVotesDTO{Date: suitableDate.Date, People: suitableDate.People})
 	}
 	return datesWithMostVotes
-}
-
-func getAllVoterNames(event storage.Event) []string {
-
-	var voterNames []string
-	for _, vote := range getAllVotes(event) {
-		if vote.Name != "" && !slices.Contains(voterNames, vote.Name) {
-			voterNames = append(voterNames, vote.Name)
-		}
-	}
-	return voterNames
-}
-
-func getAllVotes(event storage.Event) []storage.Vote {
-	var allVotes []storage.Vote
-	for _, date := range event.ProposedDates {
-		allVotes = append(allVotes, date.Votes...)
-	}
-	return allVotes
 }
 
 func getDatesWithVotes(dates []storage.ProposedDate) []storage.ProposedDate {

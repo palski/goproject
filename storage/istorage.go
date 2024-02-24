@@ -1,6 +1,6 @@
 package storage
 
-type StorageInterface interface {
+type IStorage interface {
 	InitializeDatabase()
 	AddEvent(ch chan string, name string, proposedDates []string)
 	GetAllEvents(ch chan []Event)

@@ -9,6 +9,14 @@ Disclaimer: May contain a lot of unconventional go code.
 go build
 ./goproject
 ```
+
+## Run unit test
+
+```
+cd actions
+go test
+```
+
 Starts listening http://localhost:8888
 ## API
 
@@ -17,3 +25,5 @@ Starts listening http://localhost:8888
 * GET api/v1/events
 * GET api/v1/events/{event-id}
 * GET api/v1/events/{event-id}/results
+
+

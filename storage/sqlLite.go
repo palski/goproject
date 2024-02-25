@@ -6,25 +6,25 @@ import (
 	"gorm.io/gorm"
 )
 
+var _db *gorm.DB
+
 type SqlLiteDb struct {
 }
 
 func (d *SqlLiteDb) InitializeDatabase() {
-	db := openDatabaseConnection()
-	db.AutoMigrate(&Event{})
-	db.AutoMigrate(&ProposedDate{})
-	db.AutoMigrate(&Vote{})
+	_db = openDatabaseConnection()
+	_db.AutoMigrate(&Event{})
+	_db.AutoMigrate(&ProposedDate{})
+	_db.AutoMigrate(&Vote{})
 }
 
 func (d *SqlLiteDb) AddEvent(ch chan string, name string, proposedDates []string) {
 	defer close(ch)
 
-	db := openDatabaseConnection()
-
 	newUuid := uuid.New().String()
 	event := Event{UUID: newUuid, Name: name}
 	dates := createProposedDates(newUuid, proposedDates)
-	success := addEventIntoDatabase(db, event, dates)
+	success := addEventIntoDatabase(_db, event, dates)
 
 	if success {
 		ch <- newUuid
@@ -34,31 +34,25 @@ func (d *SqlLiteDb) AddEvent(ch chan string, name string, proposedDates []string
 }
 
 func (d *SqlLiteDb) GetAllEvents(ch chan []Event) {
-
 	defer close(ch)
-	db := openDatabaseConnection()
 
 	var events []Event
-	db.Select("UUID", "Name").Find(&events)
+	_db.Select("UUID", "Name").Find(&events)
 	ch <- events
 }
 
 func (d *SqlLiteDb) GetEvent(ch chan Event, id string) {
 	defer close(ch)
 
-	db := openDatabaseConnection()
-
 	var event Event
-	db.Preload("ProposedDates.Votes").First(&event, "UUID = ?", id)
+	_db.Preload("ProposedDates.Votes").First(&event, "UUID = ?", id)
 	ch <- event
 }
 
 func (d *SqlLiteDb) AddVote(ch chan bool, eventId string, voterName string, date []string) {
 	defer close(ch)
 
-	db := openDatabaseConnection()
-
-	tx := db.Begin()
+	tx := _db.Begin()
 
 	// remove previous votes of the person
 	result := tx.Delete(&Vote{}, "event_uuid = ? and name = ?", eventId, voterName)

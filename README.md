@@ -1,21 +1,18 @@
 # Event Scheduler
 
 This my first (little bit larger than hello-world) go-project.
-Disclaimer: May contain a lot of unconventional go code.
+
+*Disclaimer: May contain unconventional go code.*
 
 ## Steps to run
 
-```
-go build
-./goproject
-```
+    go build
+    ./goproject
 
 ## Run unit test
 
-```
-cd actions
-go test
-```
+    cd actions
+    go test
 
 Starts listening http://localhost:8888
 ## API
